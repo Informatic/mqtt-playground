@@ -1,0 +1,4 @@
+mosquitto:
+  image: toke/mosquitto
+  ports:
+    - "1883:1883"
