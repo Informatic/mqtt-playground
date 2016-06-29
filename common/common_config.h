@@ -11,6 +11,8 @@
     #define MQTT_PORT 1883
 #endif
 
+#define TOPIC_PREFIX "iot/"
+
 #define BTN_PIN 0
 #define LED_PIN 2
 
