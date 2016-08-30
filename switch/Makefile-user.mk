@@ -1,3 +1,7 @@
 MODULES = app ../spejsiot
 DISABLE_SPIFFS = 1
 USER_CFLAGS = -I../common
+
+RBOOT_ENABLED ?= 1
+RBOOT_BIG_FLASH ?= 1
+SPI_SIZE        ?= 4M

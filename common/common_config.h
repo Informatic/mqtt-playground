@@ -13,6 +13,8 @@
 
 #define TOPIC_PREFIX "iot/"
 
+#define OTA_URL "http://" MQTT_BROKER "/"
+
 #define BTN_PIN 0
 #define LED_PIN 2
 

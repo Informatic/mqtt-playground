@@ -2,3 +2,10 @@ mosquitto:
   image: toke/mosquitto
   ports:
     - "1883:1883"
+
+nginx:
+  image: nginx
+  volumes:
+   - ota:/usr/share/nginx/html
+  ports:
+   - "80:80"

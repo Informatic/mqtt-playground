@@ -22,3 +22,8 @@ include $(SMING_HOME)/Makefile-rboot.mk
 else
 include $(SMING_HOME)/Makefile-project.mk
 endif
+
+ota: all
+	-mkdir ../master/ota/$(DEVICE) >/dev/null
+	cp -r out/firmware/* ../master/ota/$(DEVICE)
+	python ../master/ota.py $(DEVICE) control ota
