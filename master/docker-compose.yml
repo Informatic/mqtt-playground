@@ -1,11 +1,15 @@
 mosquitto:
   image: toke/mosquitto
+  volumes:
+    - mqtt/config/:/mqtt/config/conf.d:ro
+    - mqtt/certs/:/mqtt/config/certs:ro
   ports:
     - "1883:1883"
+    - "8883:8883"
 
 nginx:
   image: nginx
   volumes:
-   - ota:/usr/share/nginx/html
+    - ota:/usr/share/nginx/html
   ports:
-   - "80:80"
+    - "80:80"

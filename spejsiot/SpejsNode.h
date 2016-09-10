@@ -32,5 +32,5 @@ public:
     void registerInput(String key, MqttStringSubscriptionCallback cb);
     void mqttCallback(String, String);
     void controlHandler(String, String);
-    void otaUpdateCallback(bool result);
+    void otaUpdateCallback(rBootHttpUpdate& updater, bool result);
 };

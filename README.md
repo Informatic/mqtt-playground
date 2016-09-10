@@ -15,9 +15,14 @@ is directly connected on ESP-12E module.
 Software
 --------
 
-Mosquitto contained in docker is used as a broker. ESP8266 code uses [Sming
-framework](https://github.com/SmingHub/Sming). Set your Wifi configuration in
-`common/common_config.h` (used by both `switch` and `light`)
+Mosquitto contained in docker is used as a broker. For proper TLS you need to
+create self-signed certificate and store its SHA-1 fingerprint in
+`common/common_config.h`.
+
+ESP8266 code uses [slaff's
+fork of Sming framework](https://github.com/slaff/Sming). (For axTLS support)
+Set your Wifi configuration in `common/common_config.h` (used by both `switch`
+and `light`)
 
 
 Thoughts

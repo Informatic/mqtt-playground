@@ -4,7 +4,7 @@ SpejsNode node("switch");
 
 void init() {
 	node.init();
-	node.registerInput("relay", *[](String value) {
+	node.registerInput("relay", *[](String key, String value) {
 		Serial.println("handler");
 		digitalWrite(5, value == "1" ? HIGH : LOW);
 		});

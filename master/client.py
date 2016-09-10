@@ -6,18 +6,21 @@ import sys
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, rc):
     print("Connected with result code "+str(rc))
+
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
-    client.subscribe("light/status")
     client.subscribe("#")
     client.publish("iot/" + sys.argv[1] + "/" + sys.argv[2], sys.argv[3])
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     print(str(time.time())+" "+msg.topic+" "+str(msg.payload))
-    exit()
 
-client = mqtt.Client("test-client-%d" % random.randint(100, 999))
+if len(sys.argv) < 4:
+    print('Usage: client.py [DEVICE_ID] [ENDPOINT] [VALUE]');
+    exit(1)
+
+client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
 
