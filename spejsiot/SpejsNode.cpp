@@ -1,16 +1,17 @@
 #include <SpejsNode.h>
+#include <ver.h>
 
 void SpejsNode::init() {
     deviceID = WifiStation.getMAC().substring(6, 12);
 
     currentSlot = 0;
     if(!rboot_get_last_boot_rom(&currentSlot)) {
-	currentSlot = rboot_get_current_rom();
+        currentSlot = rboot_get_current_rom();
     }
 
     Serial.begin(115200);
     Serial.systemDebugOutput(false); // Debug output to serial
-    Serial.print("*** SpejsNode init, running on:");
+    Serial.print("*** SpejsNode init, running on: ");
     Serial.print(deviceID);
     Serial.printf(", current rom: %d\r\n", currentSlot);
 
@@ -20,10 +21,10 @@ void SpejsNode::init() {
     WifiAccessPoint.enable(false);
 
     WifiStation.waitConnection(
-	ConnectionDelegate(&SpejsNode::onConnected, this),
-	20, *[] {
-	Serial.println("Connection failed");
-	});
+        ConnectionDelegate(&SpejsNode::onConnected, this),
+        20, *[] {
+        Serial.println("Connection failed");
+        });
 
     inputs["control"] = MqttStringSubscriptionCallback(&SpejsNode::controlHandler, this);
 }
@@ -31,19 +32,69 @@ void SpejsNode::init() {
 void SpejsNode::keepAliveHandler() {
     if(mqtt.getConnectionState() != eTCS_Connected) {
         Serial.println("Reconnecting");
-	onConnected();
+        onConnected();
     } else {
-	uint8_t mode;
-	if(rboot_get_last_boot_mode(&mode)) {
-	    if(mode == MODE_TEMP_ROM) {
-		rboot_set_current_rom(currentSlot);
-		Serial.println("Successfuly connected, accepting temp rom");
-	    } else {
-		Serial.printf("Not a TEMP ROM boot: %d\r\n", mode);
-	    }
-	} else {
-	    Serial.println("No boot mode info");
-	}
+        uint8_t mode;
+        if(rboot_get_last_boot_mode(&mode)) {
+            if(mode == MODE_TEMP_ROM) {
+                rboot_set_current_rom(currentSlot);
+                Serial.println("Successfuly connected, accepting temp rom");
+            } else {
+                Serial.printf("Not a TEMP ROM boot: %d\r\n", mode);
+            }
+        } else {
+            Serial.println("No boot mode info");
+        }
+    }
+}
+
+void SpejsNode::httpIndex(HttpRequest &request, HttpResponse &response)
+{
+}
+
+void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
+{
+    JsonObjectStream* stream = new JsonObjectStream();
+    JsonObject& json = stream->getRoot();
+    json["version"] = 1;
+    json["device_id"] = deviceID;
+    json["device_type"] = deviceType;
+    json["rom_slot"] = currentSlot;
+    json["rom_rev"] = BUILD_ID;
+
+    JsonArray& endpoints = json.createNestedArray("endpoints");
+    for(unsigned int i = 0; i < inputs.count(); i++) {
+        endpoints.add(inputs.keyAt(i));
+    }
+    response.sendJsonObject(stream);
+}
+
+void SpejsNode::httpFile(HttpRequest &request, HttpResponse &response)
+{
+    String file = request.getPath();
+
+    if (file[0] == '/')
+        file = file.substring(1);
+
+    if (file.startsWith("api/1/")) {
+        String req = file.substring(6);
+        String key = req.substring(0, req.indexOf("/"));
+        String value = req.substring(req.indexOf("/") + 1);
+
+        if(key.length() == 0 || value.length() == 0 || !inputs.contains(key)) {
+            response.badRequest();
+        } else {
+            inputs[key](key, value);
+            JsonObjectStream* stream = new JsonObjectStream();
+            JsonObject& json = stream->getRoot();
+            json["status"] = (bool)true;
+            response.sendJsonObject(stream);
+        }
+    } else if (file[0] == '.') {
+        response.forbidden();
+    } else {
+        response.setCache(86400, true); // It's important to use cache for better performance.
+        response.sendFile(file);
     }
 }
 
@@ -71,6 +122,28 @@ void SpejsNode::onConnected() {
     mqtt.publish(TOPIC_PREFIX + deviceID + "/type", deviceType);
 
     keepaliveTimer.initializeMs(10000, TimerDelegate(&SpejsNode::keepAliveHandler, this)).start();
+
+    http.listen(80);
+
+    http.addPath("/", HttpPathDelegate(&SpejsNode::httpIndex, this));
+    http.addPath("/metadata.json", HttpPathDelegate(&SpejsNode::httpMetadata, this));
+
+    http.setDefaultHandler(HttpPathDelegate(&SpejsNode::httpFile, this));
+
+    static struct mdns_info info;//  *info = (struct mdns_info *)os_zalloc(sizeof(struct mdns_info));
+    char tmp_name[32];
+    ("iot-" + deviceID).toCharArray(tmp_name, 32);
+    info.host_name = tmp_name; // You can replace test with your own host name
+    info.ipAddr = WifiStation.getIP();
+    info.server_name = (char *) "spejsiot";
+    info.server_port = 80;
+    info.txt_data[0] = (char *) "version = now";
+
+    char tmp_type[32] = "type = ";
+    deviceType.toCharArray(tmp_type + 7, 32-7);
+    info.txt_data[1] = tmp_type;
+
+    espconn_mdns_init(&info);
 }
 
 bool SpejsNode::notify(String key, String value) {
@@ -144,9 +217,9 @@ void SpejsNode::startOTA() {
 #ifndef DISABLE_SPIFFS
     // use user supplied values (defaults for 4mb flash in makefile)
     if (slot == 0) {
-	    otaUpdater->addItem(RBOOT_SPIFFS_0, spiffsURL);
+        otaUpdater->addItem(RBOOT_SPIFFS_0, spiffsURL);
     } else {
-	    otaUpdater->addItem(RBOOT_SPIFFS_1, spiffsURL);
+        otaUpdater->addItem(RBOOT_SPIFFS_1, spiffsURL);
     }
 #endif
 
@@ -158,23 +231,23 @@ void SpejsNode::startOTA() {
 
 void SpejsNode::otaUpdateCallback(rBootHttpUpdate& updater, bool result) {
     if(result == true) {
-	    // success
-	    notify("ota", "finished");
+        // success
+        notify("ota", "finished");
 
-	    uint8 slot;
+        uint8 slot;
 
-	    if (currentSlot == 0)
+        if (currentSlot == 0)
             slot = 1;
-	    else
+        else
             slot = 0;
 
-	    // set to boot new rom and then reboot
-	    Serial.printf("Firmware updated, rebooting to rom %d...\r\n", slot);
+        // set to boot new rom and then reboot
+        Serial.printf("Firmware updated, rebooting to rom %d...\r\n", slot);
 
-	    rboot_set_temp_rom(slot);
+        rboot_set_temp_rom(slot);
 
-		System.restart();
+        System.restart();
     } else {
-	    notify("ota", "failed");
+        notify("ota", "failed");
     }
 }

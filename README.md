@@ -33,3 +33,10 @@ Oh my, that's slow.^W^Wquite fast, when patched properly.
 **WARNING!** `Sming.reset();` jumps to (serial) bootloader right after flashing.
 This causes OTA to fail with `wdt reset`. External RESET assert is required after
 flashing.
+
+TODO
+----
+ * Refactor endpoint handling
+ * Fix mDNS
+ * Store configuration (credentials, broker IP, maybe endpoints?) in
+   flash memory

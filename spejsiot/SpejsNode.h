@@ -8,6 +8,7 @@ protected:
     String deviceType;
 
     MqttClient mqtt;
+    HttpServer http;
 
     Timer keepaliveTimer;
 
@@ -33,4 +34,7 @@ public:
     void mqttCallback(String, String);
     void controlHandler(String, String);
     void otaUpdateCallback(rBootHttpUpdate& updater, bool result);
+    void httpFile(HttpRequest &request, HttpResponse &response);
+    void httpIndex(HttpRequest &request, HttpResponse &response);
+    void httpMetadata(HttpRequest &request, HttpResponse &response);
 };
