@@ -1,6 +1,10 @@
+#ifndef SPEJSNODE_H
+#define SPEJSNODE_H
+
 #include <user_config.h>
 #include <common_config.h>
 #include <SmingCore/SmingCore.h>
+#include <Endpoint.h>
 
 class SpejsNode {
 protected:
@@ -14,13 +18,14 @@ protected:
 
     rBootHttpUpdate* otaUpdater = 0;
 
-    HashMap<String, MqttStringSubscriptionCallback> inputs;
+    HashMap<String, Endpoint*> endpoints;
 
     void onConnected();
     void startOTA();
     void keepAliveHandler();
 
     uint8_t currentSlot;
+
 public:
     SpejsNode(String _deviceType) :
         mqtt(MQTT_BROKER, MQTT_PORT, MqttStringSubscriptionCallback(&SpejsNode::mqttCallback, this)),
@@ -30,7 +35,7 @@ public:
     void init();
 
     bool notify(String key, String value);
-    void registerInput(String key, MqttStringSubscriptionCallback cb);
+    void registerEndpoint(String key, Endpoint* cb);
     void mqttCallback(String, String);
     void controlHandler(String, String);
     void otaUpdateCallback(rBootHttpUpdate& updater, bool result);
@@ -38,3 +43,5 @@ public:
     void httpIndex(HttpRequest &request, HttpResponse &response);
     void httpMetadata(HttpRequest &request, HttpResponse &response);
 };
+
+#endif

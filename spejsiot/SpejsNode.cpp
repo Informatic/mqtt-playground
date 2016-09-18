@@ -1,4 +1,5 @@
 #include <SpejsNode.h>
+#include <Endpoint.h>
 #include <ver.h>
 
 void SpejsNode::init() {
@@ -15,10 +16,9 @@ void SpejsNode::init() {
     Serial.print(deviceID);
     Serial.printf(", current rom: %d\r\n", currentSlot);
 
-    WifiStation.config(WIFI_SSID, WIFI_PWD);
-    WifiStation.enable(true);
-
     WifiAccessPoint.enable(false);
+    WifiStation.enable(true);
+    WifiStation.config(WIFI_SSID, WIFI_PWD);
 
     WifiStation.waitConnection(
         ConnectionDelegate(&SpejsNode::onConnected, this),
@@ -26,7 +26,7 @@ void SpejsNode::init() {
         Serial.println("Connection failed");
         });
 
-    inputs["control"] = MqttStringSubscriptionCallback(&SpejsNode::controlHandler, this);
+	registerEndpoint("control", new ControlEndpoint());
 }
 
 void SpejsNode::keepAliveHandler() {
@@ -50,6 +50,7 @@ void SpejsNode::keepAliveHandler() {
 
 void SpejsNode::httpIndex(HttpRequest &request, HttpResponse &response)
 {
+	response.sendString("This is spejsiot device, take a look at: https://wiki.hackerspace.pl/projects:spejsiot");
 }
 
 void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
@@ -61,10 +62,15 @@ void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
     json["device_type"] = deviceType;
     json["rom_slot"] = currentSlot;
     json["rom_rev"] = BUILD_ID;
+    json["uptime"] = millis();
 
-    JsonArray& endpoints = json.createNestedArray("endpoints");
-    for(unsigned int i = 0; i < inputs.count(); i++) {
-        endpoints.add(inputs.keyAt(i));
+    JsonArray& endpoints_list = json.createNestedArray("endpoints");
+    for(unsigned int i = 0; i < endpoints.count(); i++) {
+        JsonObject& obj = endpoints_list.createNestedObject();
+        obj["name"] = endpoints.keyAt(i);
+        obj["type"] = endpoints.valueAt(i)->type;
+
+        endpoints.valueAt(i)->fillValue(obj);
     }
     response.sendJsonObject(stream);
 }
@@ -81,13 +87,13 @@ void SpejsNode::httpFile(HttpRequest &request, HttpResponse &response)
         String key = req.substring(0, req.indexOf("/"));
         String value = req.substring(req.indexOf("/") + 1);
 
-        if(key.length() == 0 || value.length() == 0 || !inputs.contains(key)) {
+        if(key.length() == 0 || value.length() == 0 || !endpoints.contains(key)) {
             response.badRequest();
         } else {
-            inputs[key](key, value);
+            EndpointResult result = endpoints[key]->onValue(key, value);
             JsonObjectStream* stream = new JsonObjectStream();
             JsonObject& json = stream->getRoot();
-            json["status"] = (bool)true;
+            json["status"] = result.status;
             response.sendJsonObject(stream);
         }
     } else if (file[0] == '.') {
@@ -112,10 +118,8 @@ void SpejsNode::onConnected() {
     mqtt.connect("iot-" + deviceID);
 #endif
 
-    mqtt.subscribe(TOPIC_PREFIX + deviceID + "/control");
-
-    for(unsigned int i = 0 ; i < inputs.count() ; i++) {
-        mqtt.subscribe(TOPIC_PREFIX + deviceID + "/" + inputs.keyAt(i));
+    for(unsigned int i = 0 ; i < endpoints.count() ; i++) {
+        mqtt.subscribe(TOPIC_PREFIX + deviceID + "/" + endpoints.keyAt(i));
     }
 
     mqtt.publish(TOPIC_PREFIX + deviceID + "/state", "online");
@@ -130,20 +134,20 @@ void SpejsNode::onConnected() {
 
     http.setDefaultHandler(HttpPathDelegate(&SpejsNode::httpFile, this));
 
-    static struct mdns_info info;//  *info = (struct mdns_info *)os_zalloc(sizeof(struct mdns_info));
+    static struct mdns_info *info = (struct mdns_info *)os_zalloc(sizeof(struct mdns_info));
     char tmp_name[32];
     ("iot-" + deviceID).toCharArray(tmp_name, 32);
-    info.host_name = tmp_name; // You can replace test with your own host name
-    info.ipAddr = WifiStation.getIP();
-    info.server_name = (char *) "spejsiot";
-    info.server_port = 80;
-    info.txt_data[0] = (char *) "version = now";
+    info->host_name = tmp_name; // You can replace test with your own host name
+    info->ipAddr = WifiStation.getIP();
+    info->server_name = (char *) "spejsiot";
+    info->server_port = 80;
+    info->txt_data[0] = (char *) "version = now";
 
     char tmp_type[32] = "type = ";
     deviceType.toCharArray(tmp_type + 7, 32-7);
-    info.txt_data[1] = tmp_type;
+    info->txt_data[1] = tmp_type;
 
-    espconn_mdns_init(&info);
+    espconn_mdns_init(info);
 }
 
 bool SpejsNode::notify(String key, String value) {
@@ -155,8 +159,9 @@ bool SpejsNode::notify(String key, String value) {
     return false;
 }
 
-void SpejsNode::registerInput(String key, MqttStringSubscriptionCallback callback) {
-    inputs[key] = callback;
+void SpejsNode::registerEndpoint(String key, Endpoint* endpoint) {
+	endpoints[key] = endpoint;
+	endpoint->bind(key, this);
 }
 
 void SpejsNode::mqttCallback(String origtopic, String value) {
@@ -172,8 +177,8 @@ void SpejsNode::mqttCallback(String origtopic, String value) {
     Serial.println(topic);
     Serial.println(value);
 
-    if(inputs.contains(topic)) {
-        inputs[topic](origtopic, value);
+    if(endpoints.contains(topic)) {
+        endpoints[topic]->onValue(origtopic, value);
     } else {
         Serial.println("unknown topic?");
     }
