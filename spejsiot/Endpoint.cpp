@@ -1,8 +1,9 @@
 #include <SpejsNode.h>
 #include <Endpoint.h>
 
-void Endpoint::bind(String key, SpejsNode* _parent) {
+void Endpoint::bind(String _key, SpejsNode* _parent) {
     parent = _parent;
+    key = _key;
 }
 
 void Endpoint::notify(String value) {
@@ -10,10 +11,16 @@ void Endpoint::notify(String value) {
         parent->notify(this, value);*/
 }
 
-template <class T> void InputEndpoint<T>::updateValue(T newValue) {
+template <class T> void ValueEndpoint<T>::updateValue(T newValue) {
     value = newValue;
-    //if(parent)
-    //    parent->notify(String("xD"), String(value));
+
+    // TODO parent->notify(this, String(value)) ?
+    if(parent)
+        parent->notify(key, String(value));
+}
+
+template <class T> void ValueEndpoint<T>::fillValue(JsonObject& obj) {
+    obj["value"] = value;
 }
 
 EndpointResult ControlEndpoint::onValue(String key, String value) {
@@ -45,4 +52,25 @@ EndpointResult OutputEndpoint::onValue(String key, String value) {
 
     digitalWrite(pin, inverted ^ currentValue);
     return 200;
+}
+
+void DHTEndpoint::bind(String _key, SpejsNode* _parent) {
+    parent = _parent;
+    key = _key;
+
+    sensor.begin();
+    samplingTimer.initializeMs(samplingRate, TimerDelegate(&DHTEndpoint::sample, this)).start();
+}
+
+void DHTEndpoint::sample() {
+    TempAndHumidity th;
+    if(sensor.readTempAndHumidity(th))
+	{
+        updateValue(th.temp);
+	}
+	else
+	{
+		Serial.print("Failed to read from DHT: ");
+		Serial.print(sensor.getLastError());
+	}
 }

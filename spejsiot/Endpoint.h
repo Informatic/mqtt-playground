@@ -17,14 +17,15 @@ public:
 
 class Endpoint {
 protected:
-    const SpejsNode* parent;
+    SpejsNode* parent;
+    String key;
 
 public:
     String type;
 
     Endpoint(String _type = "unknown") : type(_type) { }
 
-    virtual void bind(String key, SpejsNode* _parent);
+    virtual void bind(String _key, SpejsNode* _parent);
     void notify(String value);
 
     virtual EndpointResult onValue(String key, String value) {
@@ -57,26 +58,33 @@ public:
     void fillValue(JsonObject& obj);
 };
 
-template <class T> class InputEndpoint : public Endpoint {
+template <class T> class ValueEndpoint : public Endpoint {
 protected:
     T value;
     void updateValue(T newValue);
 
 public:
-    InputEndpoint(String _type) : Endpoint(_type) {}
+    ValueEndpoint(String _type) : Endpoint(_type) {}
+
+    virtual void fillValue(JsonObject& obj);
 };
 
 #include <Libraries/DHT/DHT.h>
 
-class DHT22Endpoint : public InputEndpoint<int> {
+class DHTEndpoint : public ValueEndpoint<float> {
 private:
     DHT sensor;
     Timer samplingTimer;
     int samplingRate;
 
+protected:
+    void sample();
+
 public:
-    DHT22Endpoint(int _pin, int _samplingRate = 10000) :
-        InputEndpoint("dht22"), sensor(_pin), samplingRate(_samplingRate) {}
+    DHTEndpoint(int _pin, int _samplingRate = 10000) :
+        ValueEndpoint("dht"), sensor(_pin, DHT11), samplingRate(_samplingRate) {}
+
+    void bind(String key, SpejsNode* _parent);
 };
 
 #endif
