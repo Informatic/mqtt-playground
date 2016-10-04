@@ -38,3 +38,4 @@ TODO
 ----
  * Store configuration (credentials, broker IP, maybe endpoints?) in
    flash memory
+ * [!] Fix OTA
