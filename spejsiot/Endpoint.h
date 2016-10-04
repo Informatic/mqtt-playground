@@ -48,11 +48,11 @@ private:
     bool currentValue;
 
 public:
-    OutputEndpoint(int _pin, bool _inverted = false) :
-        Endpoint("output"), pin(_pin), inverted(_inverted), currentValue(inverted) {
-        pinMode(pin, OUTPUT);
-        digitalWrite(pin, currentValue);
-    }
+    OutputEndpoint(int _pin, bool _inverted = false) : Endpoint("output"),
+        pin(_pin), inverted(_inverted), currentValue(inverted) {
+            pinMode(pin, OUTPUT);
+            digitalWrite(pin, currentValue);
+        }
 
     EndpointResult onValue(String key, String value);
     void fillValue(JsonObject& obj);

@@ -8,7 +8,7 @@ void Endpoint::bind(String _key, SpejsNode* _parent) {
 
 void Endpoint::notify(String value) {
     /*if(parent)
-        parent->notify(this, value);*/
+      parent->notify(this, value);*/
 }
 
 template <class T> void ValueEndpoint<T>::updateValue(T newValue) {
@@ -65,12 +65,12 @@ void DHTEndpoint::bind(String _key, SpejsNode* _parent) {
 void DHTEndpoint::sample() {
     TempAndHumidity th;
     if(sensor.readTempAndHumidity(th))
-	{
+    {
         updateValue(th.temp);
-	}
-	else
-	{
-		Serial.print("Failed to read from DHT: ");
-		Serial.print(sensor.getLastError());
-	}
+    }
+    else
+    {
+        Serial.print("Failed to read from DHT: ");
+        Serial.print(sensor.getLastError());
+    }
 }

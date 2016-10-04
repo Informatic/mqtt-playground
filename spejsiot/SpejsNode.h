@@ -30,8 +30,7 @@ protected:
 public:
     SpejsNode(String _deviceType) :
         mqtt(MQTT_BROKER, MQTT_PORT, MqttStringSubscriptionCallback(&SpejsNode::mqttCallback, this)),
-        deviceType(_deviceType)
-    {};
+        deviceType(_deviceType) {};
 
     void init();
 

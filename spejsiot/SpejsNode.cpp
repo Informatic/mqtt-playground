@@ -21,12 +21,11 @@ void SpejsNode::init() {
     WifiStation.config(WIFI_SSID, WIFI_PWD);
 
     WifiStation.waitConnection(
-        ConnectionDelegate(&SpejsNode::onConnected, this),
-        20, *[] {
-        Serial.println("Connection failed");
+        ConnectionDelegate(&SpejsNode::onConnected, this), 20, *[] {
+            Serial.println("Connection failed");
         });
 
-	registerEndpoint("control", new ControlEndpoint());
+    registerEndpoint("control", new ControlEndpoint());
 }
 
 void SpejsNode::keepAliveHandler() {
@@ -50,7 +49,7 @@ void SpejsNode::keepAliveHandler() {
 
 void SpejsNode::httpIndex(HttpRequest &request, HttpResponse &response)
 {
-	response.sendString("This is spejsiot device, take a look at: https://wiki.hackerspace.pl/projects:spejsiot");
+    response.sendString("This is spejsiot device, take a look at: https://wiki.hackerspace.pl/projects:spejsiot");
 }
 
 void SpejsNode::buildMetadata(JsonObjectStream* stream)
@@ -180,8 +179,8 @@ bool SpejsNode::notify(String key, String value) {
 }
 
 void SpejsNode::registerEndpoint(String key, Endpoint* endpoint) {
-	endpoints[key] = endpoint;
-	endpoint->bind(key, this);
+    endpoints[key] = endpoint;
+    endpoint->bind(key, this);
 }
 
 void SpejsNode::mqttCallback(String origtopic, String value) {
