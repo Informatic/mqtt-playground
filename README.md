@@ -19,10 +19,10 @@ Mosquitto contained in docker is used as a broker. For proper TLS you need to
 create self-signed certificate and store its SHA-1 fingerprint in
 `common/common_config.h`.
 
-ESP8266 code uses [slaff's
-fork of Sming framework](https://github.com/slaff/Sming). (For axTLS support)
-Set your Wifi configuration in `common/common_config.h` (used by both `switch`
-and `light`)
+ESP8266 code uses [patched slaff's
+fork of Sming framework](https://github.com/informatic/Sming/tree/patch-1).
+(For axTLS support) Set your Wifi configuration in `common/common_config.h`
+(used by both `switch` and `light`)
 
 
 Thoughts
@@ -36,7 +36,5 @@ flashing.
 
 TODO
 ----
- * Refactor endpoint handling
- * Fix mDNS
  * Store configuration (credentials, broker IP, maybe endpoints?) in
    flash memory

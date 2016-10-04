@@ -25,6 +25,7 @@ protected:
     void keepAliveHandler();
 
     uint8_t currentSlot;
+    void buildMetadata(JsonObjectStream* stream);
 
 public:
     SpejsNode(String _deviceType) :
@@ -38,7 +39,7 @@ public:
     void registerEndpoint(String key, Endpoint* cb);
     void mqttCallback(String, String);
     void controlHandler(String, String);
-    void otaUpdateCallback(rBootHttpUpdate& updater, bool result);
+    void otaUpdateCallback(bool result);
     void httpFile(HttpRequest &request, HttpResponse &response);
     void httpIndex(HttpRequest &request, HttpResponse &response);
     void httpMetadata(HttpRequest &request, HttpResponse &response);

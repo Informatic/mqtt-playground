@@ -1,7 +1,7 @@
 MODULES = app ../spejsiot
 DISABLE_SPIFFS = 1
 USER_CFLAGS = -I../common
-ENABLE_SSL 		  = 0
+ENABLE_SSL 		  = 1
 RBOOT_ENABLED     = 1
 RBOOT_BIG_FLASH   = 1
 RBOOT_RTC_ENABLED = 1

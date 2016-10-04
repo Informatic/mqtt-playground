@@ -53,16 +53,14 @@ void SpejsNode::httpIndex(HttpRequest &request, HttpResponse &response)
 	response.sendString("This is spejsiot device, take a look at: https://wiki.hackerspace.pl/projects:spejsiot");
 }
 
-void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
+void SpejsNode::buildMetadata(JsonObjectStream* stream)
 {
-    JsonObjectStream* stream = new JsonObjectStream();
     JsonObject& json = stream->getRoot();
     json["version"] = 1;
     json["device_id"] = deviceID;
     json["device_type"] = deviceType;
     json["rom_slot"] = currentSlot;
     json["rom_rev"] = BUILD_ID;
-    json["uptime"] = millis();
 
     JsonArray& endpoints_list = json.createNestedArray("endpoints");
     for(unsigned int i = 0; i < endpoints.count(); i++) {
@@ -72,6 +70,14 @@ void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
 
         endpoints.valueAt(i)->fillValue(obj);
     }
+}
+
+void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
+{
+    JsonObjectStream* stream = new JsonObjectStream();
+    buildMetadata(stream);
+    stream->getRoot()["uptime"] = millis();
+
     response.sendJsonObject(stream);
 }
 
@@ -107,6 +113,7 @@ void SpejsNode::httpFile(HttpRequest &request, HttpResponse &response)
 void SpejsNode::onConnected() {
     Serial.println("Connection successful");
 
+    // MQTT initialization
     mqtt.setWill(TOPIC_PREFIX + deviceID + "/state", "offline", 1, true);
 
 #ifdef ENABLE_SSL
@@ -122,18 +129,24 @@ void SpejsNode::onConnected() {
         mqtt.subscribe(TOPIC_PREFIX + deviceID + "/" + endpoints.keyAt(i));
     }
 
-    mqtt.publish(TOPIC_PREFIX + deviceID + "/state", "online");
-    mqtt.publish(TOPIC_PREFIX + deviceID + "/type", deviceType);
+    // Say hello
+    mqtt.publish(TOPIC_PREFIX + deviceID + "/state", "online", true);
 
-    keepaliveTimer.initializeMs(10000, TimerDelegate(&SpejsNode::keepAliveHandler, this)).start();
+    JsonObjectStream stream;
+    buildMetadata(&stream);
+    char* metadataStr = new char[stream.getRoot().measureLength() + 10]();
+    stream.getRoot().printTo(metadataStr, stream.getRoot().measureLength() + 10);
+    mqtt.publish(TOPIC_PREFIX + deviceID + "/metadata", metadataStr, true);
+    delete metadataStr;
 
+    // HTTP initialization
     http.listen(80);
 
     http.addPath("/", HttpPathDelegate(&SpejsNode::httpIndex, this));
     http.addPath("/metadata.json", HttpPathDelegate(&SpejsNode::httpMetadata, this));
-
     http.setDefaultHandler(HttpPathDelegate(&SpejsNode::httpFile, this));
 
+    // mDNS initialization
     static struct mdns_info *info = (struct mdns_info *)os_zalloc(sizeof(struct mdns_info));
     char tmp_name[32];
     ("iot-" + deviceID).toCharArray(tmp_name, 32);
@@ -141,18 +154,25 @@ void SpejsNode::onConnected() {
     info->ipAddr = WifiStation.getIP();
     info->server_name = (char *) "spejsiot";
     info->server_port = 80;
-    info->txt_data[0] = (char *) "version = now";
 
-    char tmp_type[32] = "type = ";
-    deviceType.toCharArray(tmp_type + 7, 32-7);
+    char tmp_version[32] = "version=";
+    int prefix_len = strlen(tmp_version);
+    strncat(tmp_version, BUILD_ID, 32);
+    info->txt_data[0] = tmp_version;
+
+    char tmp_type[32];
+    ("type=" + deviceType).toCharArray(tmp_type, 32);
     info->txt_data[1] = tmp_type;
 
     espconn_mdns_init(info);
+
+    // Keepalive Timer initialization
+    keepaliveTimer.initializeMs(10000, TimerDelegate(&SpejsNode::keepAliveHandler, this)).start();
 }
 
 bool SpejsNode::notify(String key, String value) {
     if(mqtt.getConnectionState() == eTCS_Connected) {
-        mqtt.publish("iot/" + deviceID + "/" + key, value);
+        mqtt.publish(TOPIC_PREFIX + deviceID + "/" + key, value, true);
         return true;
     }
 
@@ -173,9 +193,6 @@ void SpejsNode::mqttCallback(String origtopic, String value) {
     }
 
     String topic = origtopic.substring(devicePrefix.length() + 1);
-
-    Serial.println(topic);
-    Serial.println(value);
 
     if(endpoints.contains(topic)) {
         endpoints[topic]->onValue(origtopic, value);
@@ -234,7 +251,7 @@ void SpejsNode::startOTA() {
     notify("ota", "started");
 }
 
-void SpejsNode::otaUpdateCallback(rBootHttpUpdate& updater, bool result) {
+void SpejsNode::otaUpdateCallback(bool result) {
     if(result == true) {
         // success
         notify("ota", "finished");
