@@ -4,5 +4,5 @@ SpejsNode node("switch");
 
 void init() {
     node.init();
-    node.registerEndpoint("relay", new OutputEndpoint(5));
+    node.registerEndpoint("relay", new OutputEndpoint(2));
 }

@@ -27,6 +27,7 @@ protected:
 
     void onConnected();
     void keepAliveHandler();
+    void initializeMDNS();
 
     void buildMetadata(JsonObjectStream* stream);
 

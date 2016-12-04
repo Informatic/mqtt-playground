@@ -18,33 +18,19 @@ public:
 class Endpoint {
 protected:
     SpejsNode* parent;
-    String key;
+    String name;
 
 public:
     String type;
 
     Endpoint(String _type = "unknown") : type(_type) { }
 
-    virtual void bind(String _key, SpejsNode* _parent);
-    void notify(String value);
+    virtual void bind(String _name, SpejsNode* _parent);
+    void notify(String property, String value);
 
-    virtual EndpointResult onValue(String key, String value) {
+    virtual EndpointResult onValue(String property, String value) {
         return 400;
     }
-
-    virtual void fillValue(JsonObject& obj) { }
-};
-
-class ControlEndpoint : public Endpoint {
-public:
-    ControlEndpoint() : Endpoint("control") {}
-    EndpointResult onValue(String key, String value);
-
-    void otaUpdateCallback(bool result);
-
-protected:
-    rBootHttpUpdate* otaUpdater = 0;
-    EndpointResult startOTA();
 };
 
 class OutputEndpoint : public Endpoint {
@@ -60,8 +46,7 @@ public:
             digitalWrite(pin, currentValue);
         }
 
-    EndpointResult onValue(String key, String value);
-    void fillValue(JsonObject& obj);
+    EndpointResult onValue(String property, String value);
 };
 
 template <class T> class ValueEndpoint : public Endpoint {
@@ -71,8 +56,6 @@ protected:
 
 public:
     ValueEndpoint(String _type) : Endpoint(_type) {}
-
-    virtual void fillValue(JsonObject& obj);
 };
 
 #include <Libraries/DHT/DHT.h>
@@ -90,7 +73,19 @@ public:
     DHTEndpoint(int _pin, int _samplingRate = 10000) :
         ValueEndpoint("dht"), sensor(_pin, DHT11), samplingRate(_samplingRate) {}
 
-    void bind(String key, SpejsNode* _parent);
+    void bind(String name, SpejsNode* _parent);
+};
+
+class ImplementationEndpoint : public Endpoint {
+protected:
+    rBootHttpUpdate* otaUpdater = 0;
+
+public:
+    ImplementationEndpoint() : Endpoint("$implementation") {}
+
+    EndpointResult onValue(String property, String value);
+    void otaUpdateCallback(bool result);
+    void startOTA();
 };
 
 #endif

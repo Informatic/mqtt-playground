@@ -1,37 +1,60 @@
 #include <SpejsNode.h>
 #include <Endpoint.h>
 
-void Endpoint::bind(String _key, SpejsNode* _parent) {
+void Endpoint::bind(String _name, SpejsNode* _parent) {
     parent = _parent;
-    key = _key;
+    name = _name;
 }
 
-void Endpoint::notify(String value) {
+void Endpoint::notify(String property, String value) {
     if(parent)
-        parent->notify(key, value);
+        parent->notify(name + "/" + property, value);
 }
 
-template <class T> void ValueEndpoint<T>::updateValue(T newValue) {
-    value = newValue;
-    notify(String(value));
-}
-
-template <class T> void ValueEndpoint<T>::fillValue(JsonObject& obj) {
-    obj["value"] = value;
-}
-
-EndpointResult ControlEndpoint::onValue(String key, String value) {
-    if (value == "ota") {
-        return startOTA();
-    } else if(value == "restart") {
-        System.restart();
-        return 200;
+EndpointResult OutputEndpoint::onValue(String property, String value) {
+    if (value == "1" or value == "on" or value == "true") {
+        currentValue = 1;
+    } else if (value == "0" or value == "off" or value == "false") {
+        currentValue = 0;
     } else {
         return 400;
     }
+
+    digitalWrite(pin, inverted ^ currentValue);
+    notify("on", currentValue ? "true" : "false");
+    return 200;
 }
 
-EndpointResult ControlEndpoint::startOTA() {
+void DHTEndpoint::bind(String _name, SpejsNode* _parent) {
+    Endpoint::bind(_name, _parent);
+
+    sensor.begin();
+    samplingTimer.initializeMs(samplingRate, TimerDelegate(&DHTEndpoint::sample, this)).start();
+}
+
+void DHTEndpoint::sample() {
+    TempAndHumidity th;
+    if(sensor.readTempAndHumidity(th))
+    {
+        notify("degree", String(th.temp));
+        notify("humidity", String(th.humid));
+    }
+    else
+    {
+        Serial.print("Failed to read from DHT: ");
+        Serial.print(sensor.getLastError());
+    }
+}
+
+EndpointResult ImplementationEndpoint::onValue(String property, String value) {
+    if (property == "ota" and value == "true") {
+        startOTA();
+        return 200;
+    }
+    return 400;
+}
+
+void ImplementationEndpoint::startOTA() {
     uint8_t slot;
     rboot_config bootconf;
     String romURL = OTA_URL + parent->deviceID + "/rom0.bin";
@@ -64,18 +87,16 @@ EndpointResult ControlEndpoint::startOTA() {
     }
 #endif
 
-    otaUpdater->setCallback(otaUpdateDelegate(&ControlEndpoint::otaUpdateCallback, this));
+    otaUpdater->setCallback(otaUpdateDelegate(&ImplementationEndpoint::otaUpdateCallback, this));
     otaUpdater->start();
 
-    //notify("ota", "started");
-    return 200;
+    notify("ota", "started");
 }
 
-void ControlEndpoint::otaUpdateCallback(bool result) {
+void ImplementationEndpoint::otaUpdateCallback(bool result) {
     if(result == true) {
         // success
-        //notify("ota", "finished");
-        Serial.println("ota finished");
+        notify("ota", "finished");
 
         uint8 slot;
 
@@ -88,49 +109,9 @@ void ControlEndpoint::otaUpdateCallback(bool result) {
         Serial.printf("Firmware updated, rebooting to rom %d...\r\n", slot);
 
         rboot_set_temp_rom(slot);
+
         System.restart();
     } else {
-        Serial.println("ota failed");
-        //notify("ota", "failed");
-    }
-}
-
-void OutputEndpoint::fillValue(JsonObject& obj) {
-    obj["value"] = currentValue;
-}
-
-EndpointResult OutputEndpoint::onValue(String key, String value) {
-    if (value == "1" or value == "on") {
-        currentValue = 1;
-    } else if (value == "0" or value == "off") {
-        currentValue = 0;
-    //} else if (value == "toggle") {
-    //    currentValue = !currentValue;
-    } else {
-        return 400;
-    }
-
-    digitalWrite(pin, inverted ^ currentValue);
-    return 200;
-}
-
-void DHTEndpoint::bind(String _key, SpejsNode* _parent) {
-    parent = _parent;
-    key = _key;
-
-    sensor.begin();
-    samplingTimer.initializeMs(samplingRate, TimerDelegate(&DHTEndpoint::sample, this)).start();
-}
-
-void DHTEndpoint::sample() {
-    TempAndHumidity th;
-    if(sensor.readTempAndHumidity(th))
-    {
-        updateValue(th.temp);
-    }
-    else
-    {
-        Serial.print("Failed to read from DHT: ");
-        Serial.print(sensor.getLastError());
+        notify("ota", "failed");
     }
 }

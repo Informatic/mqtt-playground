@@ -25,7 +25,7 @@ void SpejsNode::init() {
             Serial.println("Connection failed");
         });
 
-    registerEndpoint("control", new ControlEndpoint());
+    registerEndpoint("$implementation", new ImplementationEndpoint());
 }
 
 void SpejsNode::keepAliveHandler() {
@@ -46,45 +46,67 @@ void SpejsNode::keepAliveHandler() {
                 rboot_set_current_rom(currentSlot);
                 Serial.println("Successfuly connected, accepting temp rom");
             } else {
-                Serial.printf("Not a TEMP ROM boot: %d\r\n", mode);
+                //Serial.printf("Not a TEMP ROM boot: %d\r\n", mode);
             }
         } else {
-            Serial.println("No boot mode info");
+            //Serial.println("No boot mode info");
         }
     }
 }
 
+#define DEV_TOPIC(t) (TOPIC_PREFIX + deviceID + "/" + t)
+
 void SpejsNode::httpIndex(HttpRequest &request, HttpResponse &response)
 {
-    response.sendString("This is spejsiot device, take a look at: https://wiki.hackerspace.pl/projects:spejsiot");
+    response.sendString("This is spejsiot device, take a look at: https://wiki.hackerspace.pl/projects:spejsiot\n"
+        "\nDevice type: " + deviceType +
+        "\nFirmware version: " + String(BUILD_ID) +
+        "\nMAC: " + WifiStation.getMAC());
 }
 
-void SpejsNode::buildMetadata(JsonObjectStream* stream)
-{
-    JsonObject& json = stream->getRoot();
-    json["version"] = 1;
-    json["device_id"] = deviceID;
-    json["device_type"] = deviceType;
-    json["rom_slot"] = currentSlot;
-    json["rom_rev"] = BUILD_ID;
+void SpejsNode::onConnected() {
+    Serial.println("Connection successful");
 
-    JsonArray& endpoints_list = json.createNestedArray("endpoints");
-    for(unsigned int i = 0; i < endpoints.count(); i++) {
-        JsonObject& obj = endpoints_list.createNestedObject();
-        obj["name"] = endpoints.keyAt(i);
-        obj["type"] = endpoints.valueAt(i)->type;
+    // MQTT initialization
+    mqtt.setWill(TOPIC_PREFIX + deviceID + "/$online", "false", 1, true);
 
-        endpoints.valueAt(i)->fillValue(obj);
+#ifdef ENABLE_SSL
+    const uint8_t sha1Fingerprint[] = SSL_FINGERPRINT;
+    mqtt.connect("iot-" + deviceID, "", "", true);
+    mqtt.addSslOptions(SSL_SERVER_VERIFY_LATER);
+    mqtt.setSslFingerprint(sha1Fingerprint, 20);
+#else
+    mqtt.connect("iot-" + deviceID);
+#endif
+
+    for(unsigned int i = 0 ; i < endpoints.count() ; i++) {
+        mqtt.subscribe(TOPIC_PREFIX + deviceID + "/" + endpoints.keyAt(i) + "/+/set");
     }
-}
+    mqtt.subscribe(TOPIC_PREFIX + deviceID + "/$implementation/+");
 
-void SpejsNode::httpMetadata(HttpRequest &request, HttpResponse &response)
-{
-    JsonObjectStream* stream = new JsonObjectStream();
-    buildMetadata(stream);
-    stream->getRoot()["uptime"] = millis();
+    // Say hello
+    mqtt.publish(DEV_TOPIC("$online"), "true", true);
+    mqtt.publish(DEV_TOPIC("$homie"), "2", true);
+    mqtt.publish(DEV_TOPIC("$name"), deviceType, true);
+    mqtt.publish(DEV_TOPIC("$localip"), WifiStation.getIP().toString(), true);
+    mqtt.publish(DEV_TOPIC("$mac"), WifiStation.getMAC(), true);
+    mqtt.publish(DEV_TOPIC("$fw/name"), "spejsiot", true);
+    mqtt.publish(DEV_TOPIC("$fw/version"), BUILD_ID, true);
 
-    response.sendJsonObject(stream);
+    for(unsigned int i = 0; i < endpoints.count(); i++) {
+        mqtt.publish(DEV_TOPIC(endpoints.keyAt(i) + "/$type"), endpoints.valueAt(i)->type, true);
+    }
+
+    // HTTP initialization
+    http.listen(80);
+    http.addPath("/", HttpPathDelegate(&SpejsNode::httpIndex, this));
+    http.setDefaultHandler(HttpPathDelegate(&SpejsNode::httpFile, this));
+
+    // mDNS initialization
+    initializeMDNS();
+
+    // Keepalive Timer initialization
+    keepaliveTimer.initializeMs(10000, TimerDelegate(&SpejsNode::keepAliveHandler, this)).start();
 }
 
 void SpejsNode::httpFile(HttpRequest &request, HttpResponse &response)
@@ -108,51 +130,11 @@ void SpejsNode::httpFile(HttpRequest &request, HttpResponse &response)
             json["status"] = result.status;
             response.sendJsonObject(stream);
         }
-    } else if (file[0] == '.') {
-        response.forbidden();
-    } else {
-        response.setCache(86400, true); // It's important to use cache for better performance.
-        response.sendFile(file);
     }
 }
 
-void SpejsNode::onConnected() {
-    Serial.println("Connection successful");
 
-    // MQTT initialization
-    mqtt.setWill(TOPIC_PREFIX + deviceID + "/state", "offline", 1, true);
-
-#ifdef ENABLE_SSL
-    const uint8_t sha1Fingerprint[] = SSL_FINGERPRINT;
-    mqtt.connect("iot-" + deviceID, "", "", true);
-    mqtt.addSslOptions(SSL_SERVER_VERIFY_LATER);
-    mqtt.setSslFingerprint(sha1Fingerprint, 20);
-#else
-    mqtt.connect("iot-" + deviceID);
-#endif
-
-    for(unsigned int i = 0 ; i < endpoints.count() ; i++) {
-        mqtt.subscribe(TOPIC_PREFIX + deviceID + "/" + endpoints.keyAt(i));
-    }
-
-    // Say hello
-    mqtt.publish(TOPIC_PREFIX + deviceID + "/state", "online", true);
-
-    JsonObjectStream stream;
-    buildMetadata(&stream);
-    char* metadataStr = new char[stream.getRoot().measureLength() + 10]();
-    stream.getRoot().printTo(metadataStr, stream.getRoot().measureLength() + 10);
-    mqtt.publish(TOPIC_PREFIX + deviceID + "/metadata", metadataStr, true);
-    delete metadataStr;
-
-    // HTTP initialization
-    http.listen(80);
-
-    http.addPath("/", HttpPathDelegate(&SpejsNode::httpIndex, this));
-    http.addPath("/metadata.json", HttpPathDelegate(&SpejsNode::httpMetadata, this));
-    http.setDefaultHandler(HttpPathDelegate(&SpejsNode::httpFile, this));
-
-    // mDNS initialization
+void SpejsNode::initializeMDNS() {
     static struct mdns_info *info = (struct mdns_info *)os_zalloc(sizeof(struct mdns_info));
     char tmp_name[32];
     ("iot-" + deviceID).toCharArray(tmp_name, 32);
@@ -171,14 +153,11 @@ void SpejsNode::onConnected() {
     info->txt_data[1] = tmp_type;
 
     espconn_mdns_init(info);
-
-    // Keepalive Timer initialization
-    keepaliveTimer.initializeMs(10000, TimerDelegate(&SpejsNode::keepAliveHandler, this)).start();
 }
 
 bool SpejsNode::notify(String key, String value) {
     if(mqtt.getConnectionState() == eTCS_Connected) {
-        mqtt.publish(TOPIC_PREFIX + deviceID + "/" + key + "/state", value, true);
+        mqtt.publish(TOPIC_PREFIX + deviceID + "/" + key, value, true);
         return true;
     } else {
         Serial.println("MQTT Not Connected!!!");
@@ -200,11 +179,13 @@ void SpejsNode::mqttCallback(String origtopic, String value) {
         return;
     }
 
-    String topic = origtopic.substring(devicePrefix.length() + 1);
+    int propPos = origtopic.indexOf("/", devicePrefix.length() + 1);
+    String endpoint = origtopic.substring(devicePrefix.length() + 1, propPos);
+    String property = origtopic.substring(propPos+1, origtopic.indexOf("/", propPos+1));
 
-    if(endpoints.contains(topic)) {
-        endpoints[topic]->onValue(origtopic, value);
+    if(endpoints.contains(endpoint)) {
+        Serial.printf("%s - %s response: %d\n", endpoint.c_str(), property.c_str(), endpoints[endpoint]->onValue(property, value).status);
     } else {
-        Serial.println("unknown topic?");
+        Serial.println("unknown topic? " + endpoint);
     }
 }
