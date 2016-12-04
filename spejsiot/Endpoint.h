@@ -39,6 +39,12 @@ class ControlEndpoint : public Endpoint {
 public:
     ControlEndpoint() : Endpoint("control") {}
     EndpointResult onValue(String key, String value);
+
+    void otaUpdateCallback(bool result);
+
+protected:
+    rBootHttpUpdate* otaUpdater = 0;
+    EndpointResult startOTA();
 };
 
 class OutputEndpoint : public Endpoint {

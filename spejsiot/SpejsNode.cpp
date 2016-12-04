@@ -29,10 +29,17 @@ void SpejsNode::init() {
 }
 
 void SpejsNode::keepAliveHandler() {
+    static int failureCounter = 0;
+
     if(mqtt.getConnectionState() != eTCS_Connected) {
         Serial.println("Reconnecting");
-        onConnected();
+        if(failureCounter++ < 5)
+            onConnected();
+        else
+            System.restart();
     } else {
+        failureCounter = 0;
+
         uint8_t mode;
         if(rboot_get_last_boot_mode(&mode)) {
             if(mode == MODE_TEMP_ROM) {
@@ -171,8 +178,10 @@ void SpejsNode::onConnected() {
 
 bool SpejsNode::notify(String key, String value) {
     if(mqtt.getConnectionState() == eTCS_Connected) {
-        mqtt.publish(TOPIC_PREFIX + deviceID + "/" + key, value, true);
+        mqtt.publish(TOPIC_PREFIX + deviceID + "/" + key + "/state", value, true);
         return true;
+    } else {
+        Serial.println("MQTT Not Connected!!!");
     }
 
     return false;
@@ -197,78 +206,5 @@ void SpejsNode::mqttCallback(String origtopic, String value) {
         endpoints[topic]->onValue(origtopic, value);
     } else {
         Serial.println("unknown topic?");
-    }
-}
-
-void SpejsNode::controlHandler(String key, String value) {
-    Serial.println("Control command: " + value);
-    if(value == "ota") {
-        startOTA();
-    } else if(value == "restart") {
-        System.restart();
-    } else {
-        Serial.println("Invalid command");
-    }
-}
-
-void SpejsNode::startOTA() {
-    uint8_t slot;
-    rboot_config bootconf;
-    String romURL = OTA_URL + deviceID + "/rom0.bin";
-    String spiffsURL = OTA_URL + deviceID + "/spiff_rom.bin";
-
-    Serial.println("Updating...");
-
-    // need a clean object, otherwise if run before and failed will not run again
-    if (otaUpdater) delete otaUpdater;
-    otaUpdater = new rBootHttpUpdate();
-
-    bootconf = rboot_get_config();
-
-    if (currentSlot == 0)
-        slot = 1;
-    else
-        slot = 0;
-
-    Serial.printf("Updating to rom %d.\r\n", slot);
-
-    // flash rom to position indicated in the rBoot config rom table
-    otaUpdater->addItem(bootconf.roms[slot], romURL);
-
-#ifndef DISABLE_SPIFFS
-    // use user supplied values (defaults for 4mb flash in makefile)
-    if (slot == 0) {
-        otaUpdater->addItem(RBOOT_SPIFFS_0, spiffsURL);
-    } else {
-        otaUpdater->addItem(RBOOT_SPIFFS_1, spiffsURL);
-    }
-#endif
-
-    otaUpdater->setCallback(otaUpdateDelegate(&SpejsNode::otaUpdateCallback, this));
-    otaUpdater->start();
-
-    notify("ota", "started");
-}
-
-void SpejsNode::otaUpdateCallback(bool result) {
-    if(result == true) {
-        // success
-        notify("ota", "finished");
-
-        uint8 slot;
-
-        if (currentSlot == 0)
-            slot = 1;
-        else
-            slot = 0;
-
-        // set to boot new rom and then reboot
-        Serial.printf("Firmware updated, rebooting to rom %d...\r\n", slot);
-
-        rboot_set_temp_rom(slot);
-
-        System.restart();
-    } else {
-        notify("ota", "failed");
     }
 }
